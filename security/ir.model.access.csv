@@ -1,0 +1,2 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+access_nexus_odoo_sign_reports_nexus_odoo_sign_reports,nexus_odoo_sign_reports.nexus_odoo_sign_reports,model_nexus_odoo_sign_reports_nexus_odoo_sign_reports,base.group_user,1,1,1,1
