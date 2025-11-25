@@ -58,27 +58,49 @@ class SignControllerDynamic(http.Controller):
             _logger.warning("Sign Download: Could not generate completed doc. Falling back to template.")
             template = sign_request.template_id
             
-            # 1. Check 'attachment_ids' (Newer Odoo)
+            # 1. Check 'attachment_ids' (Newer Odoo / Multi-doc support)
             if hasattr(template, 'attachment_ids') and template.attachment_ids:
-                content = template.attachment_ids[0].raw
-                _logger.info("Sign Download: Found via template.attachment_ids")
+                # Try to find the first PDF in the list
+                for att in template.attachment_ids:
+                    if att.mimetype == 'application/pdf':
+                        content = att.raw
+                        _logger.info(f"Sign Download: Found via template.attachment_ids (ID: {att.id})")
+                        break
+                # If no specific PDF found, take the first one
+                if not content and template.attachment_ids:
+                    content = template.attachment_ids[0].raw
+                    _logger.info("Sign Download: Found via template.attachment_ids[0] (fallback)")
 
-            # 2. Check 'attachment_id' (Older Odoo)
+            # 2. Check 'attachment_id' (Legacy Standard Odoo)
             elif hasattr(template, 'attachment_id') and template.attachment_id:
                 content = template.attachment_id.raw
                 _logger.info("Sign Download: Found via template.attachment_id")
 
-            # 3. Last Resort: Search ir.attachment table directly
+            # 3. Check 'document_id' (Documents App Integration)
+            elif hasattr(template, 'document_id') and template.document_id:
+                # Documents app usually links the file via 'attachment_id' or 'datas'
+                if hasattr(template.document_id, 'attachment_id') and template.document_id.attachment_id:
+                     content = template.document_id.attachment_id.raw
+                     _logger.info("Sign Download: Found via template.document_id.attachment_id")
+                elif hasattr(template.document_id, 'raw'):
+                     content = template.document_id.raw
+                     _logger.info("Sign Download: Found via template.document_id.raw")
+                elif hasattr(template.document_id, 'datas') and template.document_id.datas:
+                     content = base64.b64decode(template.document_id.datas)
+                     _logger.info("Sign Download: Found via template.document_id.datas")
+
+            # 4. Last Resort: Search ir.attachment table directly
             # Sometimes fields are removed but the attachment link exists in the DB
             if not content:
+                # We remove the mimetype check to be broader, and look for anything linked
                 attachments = request.env['ir.attachment'].sudo().search([
                     ('res_model', '=', 'sign.template'),
                     ('res_id', '=', template.id),
-                    ('mimetype', '=', 'application/pdf')
-                ], limit=1)
+                ], limit=1, order='id desc')
+                
                 if attachments:
                     content = attachments.raw
-                    _logger.info("Sign Download: Found via direct ir.attachment search")
+                    _logger.info(f"Sign Download: Found via direct ir.attachment search (ID: {attachments.id})")
 
         # ---------------------------------------------------------
         # Final Output
