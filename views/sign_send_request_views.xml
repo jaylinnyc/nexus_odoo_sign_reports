@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+    <record id="sign_send_request_view_form_inherit_preview" model="ir.ui.view">
+        <field name="name">sign.send.request.view.form.inherit.preview</field>
+        <field name="model">sign.send.request</field>
+        <field name="inherit_id" ref="sign.sign_send_request_view_form"/>
+        <field name="arch" type="xml">
+            <!-- Add Preview Button next to Sign Now / Send -->
+            <xpath expr="//footer/button[@name='sign_directly']" position="before">
+                 <!-- Only show if we are coming from a record (like SO/PO) -->
+                <button string="Preview" 
+                        name="action_preview" 
+                        type="object" 
+                        class="btn-secondary" 
+                        data-hotkey="p"
+                        invisible="not context.get('active_model')"/>
+            </xpath>
+        </field>
+    </record>
+</odoo>
