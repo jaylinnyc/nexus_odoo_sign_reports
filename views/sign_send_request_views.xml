@@ -8,7 +8,6 @@
             
             <!-- Insert Buttons in the footer -->
             <xpath expr="//footer/button[@name='sign_directly']" position="before">
-                
                 <!-- Preview (New Tab) -->
                 <button string="Preview" 
                         name="action_preview" 
@@ -24,11 +23,14 @@
                         class="btn-secondary" 
                         data-hotkey="d"
                         invisible="not context.get('active_model') or (not has_default_template and not template_id)"/>
-                        
             </xpath>
 
-            <!-- Optional: Info Alert -->
-            <xpath expr="//form" position="before">
+            <!-- 
+                 FIXED: Target the first 'group' and put the alert BEFORE it.
+                 This places the alert inside the form, at the top.
+                 Do not use //form position="before".
+            -->
+            <xpath expr="//group" position="before">
                 <div class="alert alert-info" role="alert" invisible="not context.get('active_model')">
                     <small>Fields matching Order names (e.g. <b>amount_total</b>) are auto-filled on Preview/Download.</small>
                 </div>
