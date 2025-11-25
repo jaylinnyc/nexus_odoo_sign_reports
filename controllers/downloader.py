@@ -17,9 +17,27 @@ class SignControllerDynamic(http.Controller):
             return request.not_found()
 
         # 3. Generate PDF
-        # include_log=False is the secret switch to get just the PDF and not a ZIP
-        content, content_type = sign_request._get_completed_document(include_log=False)
+        # Odoo 19/Master refactored _get_completed_document. 
+        # We try available methods or fallback to the blank template.
+        content = False
         
+        if hasattr(sign_request, '_get_completed_document'):
+            # Odoo 16/17/18
+            content, _ = sign_request._get_completed_document(include_log=False)
+            
+        elif hasattr(sign_request, '_generate_completed_document'):
+            # Potential Odoo 19 refactor name
+            content, _ = sign_request._generate_completed_document(include_log=False)
+            
+        elif hasattr(sign_request, 'generate_completed_document'):
+            # Alternative public method name
+            content, _ = sign_request.generate_completed_document(include_log=False)
+            
+        if not content:
+            # Fallback: Return the blank template PDF if merging fails
+            # 'raw' gives the binary content of the attachment
+            content = sign_request.template_id.attachment_id.raw
+
         # 4. Return as File Download
         filename = f"{sign_request.reference or 'document'}.pdf"
         
