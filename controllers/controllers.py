@@ -1,21 +1,32 @@
-# from odoo import http
+from odoo import http
+from odoo.http import request
 
+class SignControllerDynamic(http.Controller):
+    
+    @http.route('/sign/download/pdf_only/<int:request_id>/<string:token>', type='http', auth='public')
+    def download_pdf_only(self, request_id, token, **kwargs):
+        """
+        Custom endpoint to download ONLY the PDF (with values filled),
+        skipping the Certificate/Audit Log ZIP generation.
+        """
+        # 1. Load Request
+        sign_request = request.env['sign.request'].sudo().browse(request_id)
+        
+        # 2. Security Check
+        if not sign_request.exists() or sign_request.access_token != token:
+            return request.not_found()
 
-# class NexusOdooSignReports(http.Controller):
-#     @http.route('/nexus_odoo_sign_reports/nexus_odoo_sign_reports', auth='public')
-#     def index(self, **kw):
-#         return "Hello, world"
-
-#     @http.route('/nexus_odoo_sign_reports/nexus_odoo_sign_reports/objects', auth='public')
-#     def list(self, **kw):
-#         return http.request.render('nexus_odoo_sign_reports.listing', {
-#             'root': '/nexus_odoo_sign_reports/nexus_odoo_sign_reports',
-#             'objects': http.request.env['nexus_odoo_sign_reports.nexus_odoo_sign_reports'].search([]),
-#         })
-
-#     @http.route('/nexus_odoo_sign_reports/nexus_odoo_sign_reports/objects/<model("nexus_odoo_sign_reports.nexus_odoo_sign_reports"):obj>', auth='public')
-#     def object(self, obj, **kw):
-#         return http.request.render('nexus_odoo_sign_reports.object', {
-#             'object': obj
-#         })
-
+        # 3. Generate PDF
+        # include_log=False is the secret switch to get just the PDF and not a ZIP
+        content, content_type = sign_request._get_completed_document(include_log=False)
+        
+        # 4. Return as File Download
+        filename = f"{sign_request.reference or 'document'}.pdf"
+        
+        return request.make_response(
+            content,
+            headers=[
+                ('Content-Type', 'application/pdf'),
+                ('Content-Disposition', f'attachment; filename="{filename}"')
+            ]
+        )
