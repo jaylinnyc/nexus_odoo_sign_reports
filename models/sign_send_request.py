@@ -6,7 +6,6 @@ class SignSendRequest(models.TransientModel):
     def action_preview(self):
         """ 
         Opens the document in a new tab (Viewer Mode).
-        This allows the user to see the filled values before deciding to send.
         """
         request = self.create_request()
         self._populate_dynamic_fields(request)
@@ -18,25 +17,30 @@ class SignSendRequest(models.TransientModel):
 
     def action_download_preview(self):
         """ 
-        Creates the request, populates data, and immediately triggers 
-        a download of the PDF using our custom controller.
-        
-        This points to '/sign/download/pdf_only/...' to avoid Odoo
-        zipping the file with the audit log.
+        Smart Download:
+        - If Single Document -> Download PDF directly (No ZIP).
+        - If Multiple Documents -> Download ZIP (Standard Odoo behavior).
         """
         request = self.create_request()
         self._populate_dynamic_fields(request)
 
+        # Default: Use our custom 'PDF Only' controller
+        url = f'/sign/download/pdf_only/{request.id}/{request.access_token}'
+
+        # Check for Multi-Document Template (Odoo 19 feature)
+        # If 'attachment_ids' exists and has more than 1 file, fallback to standard ZIP
+        if hasattr(request.template_id, 'attachment_ids') and len(request.template_id.attachment_ids) > 1:
+            url = f'/sign/download/{request.id}/{request.access_token}/completed'
+
         return {
             'type': 'ir.actions.act_url',
-            'url': f'/sign/download/pdf_only/{request.id}/{request.access_token}',
-            'target': 'self', # 'self' triggers the browser download dialog
+            'url': url,
+            'target': 'self',
         }
 
     def create_request(self):
         """ 
-        Override standard creation to ensure dynamic fields are always populated,
-        whether the user clicks 'Send' or 'Sign Now' or 'Preview'.
+        Override standard creation to ensure dynamic fields are always populated.
         """
         request = super(SignSendRequest, self).create_request()
         self._populate_dynamic_fields(request)
@@ -47,11 +51,9 @@ class SignSendRequest(models.TransientModel):
         Introspects the context to find the source record (SO/PO) and 
         fills matching fields in the Sign Request.
         """
-        # 1. Check Context for Source Record
         active_model = self.env.context.get('active_model')
         active_id = self.env.context.get('active_id')
 
-        # Guard clauses
         if not request or not active_model or not active_id:
             return
 
@@ -62,21 +64,15 @@ class SignSendRequest(models.TransientModel):
         
         values_to_write = []
         
-        # 2. Iterate template items linked to this request
         for item in request.template_id.sign_item_ids:
-            # Skip items without names
             if not item.name:
                 continue
 
-            # 3. Match Field Names
-            # If the Sign Item name (e.g., 'amount_total') exists on the source record
             if hasattr(source_record, item.name):
                 field_value = getattr(source_record, item.name)
                 
-                # Convert value to string (Sign requires text values)
                 str_value = ''
                 if isinstance(field_value, models.Model):
-                    # Handle Many2one fields (e.g., partner_id -> "Gemini Inc.")
                     str_value = field_value.display_name
                 elif isinstance(field_value, (float, int)):
                     str_value = str(field_value)
@@ -90,6 +86,5 @@ class SignSendRequest(models.TransientModel):
                         'value': str_value,
                     })
 
-        # 4. Bulk Create Values
         if values_to_write:
             self.env['sign.request.item.value'].create(values_to_write)
