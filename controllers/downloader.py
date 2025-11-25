@@ -1,114 +1,28 @@
 from odoo import http
 from odoo.http import request
-from werkzeug.exceptions import NotFound
-import base64
-import logging
-
-_logger = logging.getLogger(__name__)
 
 class SignControllerDynamic(http.Controller):
     
     @http.route('/sign/download/pdf_only/<int:request_id>/<string:token>', type='http', auth='public')
     def download_pdf_only(self, request_id, token, **kwargs):
         """
-        Custom endpoint to download ONLY the PDF.
-        Attempts to generate the completed doc first, falls back to the blank template.
+        Custom endpoint to download ONLY the PDF (with values filled),
+        skipping the Certificate/Audit Log ZIP generation.
         """
         # 1. Load Request
         sign_request = request.env['sign.request'].sudo().browse(request_id)
         
         # 2. Security Check
         if not sign_request.exists() or sign_request.access_token != token:
-            _logger.warning(f"Sign Download: Security Fail. ReqID: {request_id}, Token: {token}")
-            raise NotFound()
+            return request.not_found()
 
-        _logger.info(f"Sign Download: Starting download for Request {request_id}")
-
-        content = False
+        # 3. Generate PDF
+        # include_log=False ensures we get just the PDF bytes, not a zip
+        content, content_type = sign_request._get_completed_document(include_log=False)
+        
+        # 4. Return as File Download
         filename = f"{sign_request.reference or 'document'}.pdf"
-
-        # ---------------------------------------------------------
-        # Attempt A: Try to get the "Completed" doc (Values Filled)
-        # ---------------------------------------------------------
-        # Note: Odoo 19/Master is refactoring this. We try known method names.
-        methods = ['_get_completed_document', 'generate_completed_document', '_generate_completed_document']
-        for method in methods:
-            if hasattr(sign_request, method):
-                try:
-                    _logger.info(f"Sign Download: Trying method {method}")
-                    # Try to get content. Some methods return (data, filetype), others just data.
-                    result = getattr(sign_request, method)(include_log=False)
-                    
-                    if isinstance(result, tuple):
-                        content = result[0]
-                    else:
-                        content = result
-                        
-                    if content:
-                        _logger.info("Sign Download: Success via method generation.")
-                        break
-                except Exception as e:
-                    _logger.error(f"Sign Download: Method {method} failed: {e}")
-                    continue
-
-        # ---------------------------------------------------------
-        # Attempt B: Fallback to BLANK Template (No Values Filled)
-        # ---------------------------------------------------------
-        if not content:
-            _logger.warning("Sign Download: Could not generate completed doc. Falling back to template.")
-            template = sign_request.template_id
-            
-            # 1. Check 'attachment_ids' (Newer Odoo / Multi-doc support)
-            if hasattr(template, 'attachment_ids') and template.attachment_ids:
-                # Try to find the first PDF in the list
-                for att in template.attachment_ids:
-                    if att.mimetype == 'application/pdf':
-                        content = att.raw
-                        _logger.info(f"Sign Download: Found via template.attachment_ids (ID: {att.id})")
-                        break
-                # If no specific PDF found, take the first one
-                if not content and template.attachment_ids:
-                    content = template.attachment_ids[0].raw
-                    _logger.info("Sign Download: Found via template.attachment_ids[0] (fallback)")
-
-            # 2. Check 'attachment_id' (Legacy Standard Odoo)
-            elif hasattr(template, 'attachment_id') and template.attachment_id:
-                content = template.attachment_id.raw
-                _logger.info("Sign Download: Found via template.attachment_id")
-
-            # 3. Check 'document_id' (Documents App Integration)
-            elif hasattr(template, 'document_id') and template.document_id:
-                # Documents app usually links the file via 'attachment_id' or 'datas'
-                if hasattr(template.document_id, 'attachment_id') and template.document_id.attachment_id:
-                     content = template.document_id.attachment_id.raw
-                     _logger.info("Sign Download: Found via template.document_id.attachment_id")
-                elif hasattr(template.document_id, 'raw'):
-                     content = template.document_id.raw
-                     _logger.info("Sign Download: Found via template.document_id.raw")
-                elif hasattr(template.document_id, 'datas') and template.document_id.datas:
-                     content = base64.b64decode(template.document_id.datas)
-                     _logger.info("Sign Download: Found via template.document_id.datas")
-
-            # 4. Last Resort: Search ir.attachment table directly
-            # Sometimes fields are removed but the attachment link exists in the DB
-            if not content:
-                # We remove the mimetype check to be broader, and look for anything linked
-                attachments = request.env['ir.attachment'].sudo().search([
-                    ('res_model', '=', 'sign.template'),
-                    ('res_id', '=', template.id),
-                ], limit=1, order='id desc')
-                
-                if attachments:
-                    content = attachments.raw
-                    _logger.info(f"Sign Download: Found via direct ir.attachment search (ID: {attachments.id})")
-
-        # ---------------------------------------------------------
-        # Final Output
-        # ---------------------------------------------------------
-        if not content:
-            _logger.error(f"Sign Download: FATAL - No content found for Request {request_id} / Template {sign_request.template_id.id}")
-            raise NotFound()
-
+        
         return request.make_response(
             content,
             headers=[

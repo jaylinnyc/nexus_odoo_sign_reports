@@ -4,9 +4,7 @@ class SignSendRequest(models.TransientModel):
     _inherit = 'sign.send.request'
 
     def action_preview(self):
-        """ 
-        Opens the document in a new tab (Viewer Mode).
-        """
+        """ Opens the document in a new tab (Viewer Mode) """
         request = self.create_request()
         self._populate_dynamic_fields(request)
         return {
@@ -27,9 +25,9 @@ class SignSendRequest(models.TransientModel):
         # Default: Use our custom 'PDF Only' controller
         url = f'/sign/download/pdf_only/{request.id}/{request.access_token}'
 
-        # Check for Multi-Document Template (Odoo 19 feature)
-        # If 'attachment_ids' exists and has more than 1 file, fallback to standard ZIP
-        if hasattr(request.template_id, 'attachment_ids') and len(request.template_id.attachment_ids) > 1:
+        # Check for Multi-Document Template (Odoo 19 specific)
+        # We check the new field 'document_ids'
+        if hasattr(request.template_id, 'document_ids') and len(request.template_id.document_ids) > 1:
             url = f'/sign/download/{request.id}/{request.access_token}/completed'
 
         return {
@@ -39,18 +37,13 @@ class SignSendRequest(models.TransientModel):
         }
 
     def create_request(self):
-        """ 
-        Override standard creation to ensure dynamic fields are always populated.
-        """
+        """ Override standard creation to ensure dynamic fields are always populated. """
         request = super(SignSendRequest, self).create_request()
         self._populate_dynamic_fields(request)
         return request
 
     def _populate_dynamic_fields(self, request):
-        """ 
-        Introspects the context to find the source record (SO/PO) and 
-        fills matching fields in the Sign Request.
-        """
+        """ Introspects the context and fills matching fields. """
         active_model = self.env.context.get('active_model')
         active_id = self.env.context.get('active_id')
 
@@ -61,7 +54,6 @@ class SignSendRequest(models.TransientModel):
             return
 
         source_record = self.env[active_model].browse(active_id)
-        
         values_to_write = []
         
         for item in request.template_id.sign_item_ids:
