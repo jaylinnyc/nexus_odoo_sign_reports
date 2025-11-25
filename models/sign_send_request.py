@@ -4,7 +4,9 @@ class SignSendRequest(models.TransientModel):
     _inherit = 'sign.send.request'
 
     def action_preview(self):
-        """ Opens the document in a new tab (Viewer Mode) """
+        """ 
+        Opens the document in a new tab (Viewer Mode).
+        """
         request = self.create_request()
         self._populate_dynamic_fields(request)
         return {
@@ -15,24 +17,17 @@ class SignSendRequest(models.TransientModel):
 
     def action_download_preview(self):
         """ 
-        Smart Download:
-        - If Single Document -> Download PDF directly (No ZIP).
-        - If Multiple Documents -> Download ZIP (Standard Odoo behavior).
+        Standard Download:
+        Creates the request, populates data, and triggers the standard Odoo 
+        download endpoint. This returns a ZIP file containing the PDF and Audit Log.
         """
         request = self.create_request()
         self._populate_dynamic_fields(request)
 
-        # Default: Use our custom 'PDF Only' controller
-        url = f'/sign/download/pdf_only/{request.id}/{request.access_token}'
-
-        # Check for Multi-Document Template (Odoo 19 specific)
-        # We check the new field 'document_ids'
-        if hasattr(request.template_id, 'document_ids') and len(request.template_id.document_ids) > 1:
-            url = f'/sign/download/{request.id}/{request.access_token}/completed'
-
+        # Standard Odoo Endpoint
         return {
             'type': 'ir.actions.act_url',
-            'url': url,
+            'url': f'/sign/download/{request.id}/{request.access_token}/completed',
             'target': 'self',
         }
 
