@@ -17,8 +17,8 @@ class SignControllerDynamic(http.Controller):
             return request.not_found()
 
         # 3. Generate PDF
-        # include_log=False ensures we get just the PDF bytes, not a zip
-        content, content_type = sign_request._get_completed_document(include_log=False)
+        # get_completed_document() returns (pdf_bytes, 'application/pdf') for the filled/signed PDF only
+        content, content_type = sign_request.get_completed_document()
         
         # 4. Return as File Download
         filename = f"{sign_request.reference or 'document'}.pdf"
